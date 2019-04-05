@@ -1,0 +1,12 @@
+SELECT TOP 1000 [ScheduleID]       
+,[ReportID]       
+,[SubscriptionID]       
+,[ReportAction]   
+FROM [ReportServer].[dbo].[ReportSchedule]  
+where SubscriptionID = 'INSERT ID HERE'      
+
+SELECT * FROM [ReportServer].[dbo].[Catalog]  
+where ItemID = 'SELECT ITEM ID HERE'     
+
+select * from ReportServer.dbo.Subscriptions   
+where Report_OID = 'REPORT OID HERE'
