@@ -3,10 +3,10 @@
 --1st statement selects the tranasction id where the split sale flag hasn't been populated in the last 90 days (uses existing logic)
 select *
 into #updateflag
-from (select H.TransactionID from CRDMPointOfSale..CRDM_Header H WITH (NOLOCK)
-	  INNER JOIN DB1 RT WITH (NOLOCK) on RT.OrigStoreNo = H.StoreNo 
+from (select H.TransactionID from DB1 H WITH (NOLOCK)
+	  INNER JOIN DB2 RT WITH (NOLOCK) on RT.OrigStoreNo = H.StoreNo 
 	  AND RT.OrigPOSNo = H.POSNo AND RT.OrigTicketNo = H.TicketNo and CAST(RT.OrigTransDate as DATE) = CAST(H.EndTransDateTime as DATE)
-	  INNER JOIN DB2 HRtn WITH (NOLOCK) on RT.TransactionID = HRtn.TransactionID AND HRtn.TransactionType = 2 
+	  INNER JOIN DB3 HRtn WITH (NOLOCK) on RT.TransactionID = HRtn.TransactionID AND HRtn.TransactionType = 2 
 	  WHERE H.IsSplitSaleFlg = 0 
 	  AND H.InsertedDateTime between dateadd(day,-90,getdate()) and getdate())
 as UpdateFlag
