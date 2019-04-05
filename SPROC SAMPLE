@@ -1,0 +1,54 @@
+--Just a sample
+
+--1st statement selects the tranasction id where the split sale flag hasn't been populated in the last 90 days (uses existing logic)
+select *
+into #updateflag
+from (select H.TransactionID from CRDMPointOfSale..CRDM_Header H WITH (NOLOCK)
+	  INNER JOIN DB1 RT WITH (NOLOCK) on RT.OrigStoreNo = H.StoreNo 
+	  AND RT.OrigPOSNo = H.POSNo AND RT.OrigTicketNo = H.TicketNo and CAST(RT.OrigTransDate as DATE) = CAST(H.EndTransDateTime as DATE)
+	  INNER JOIN DB2 HRtn WITH (NOLOCK) on RT.TransactionID = HRtn.TransactionID AND HRtn.TransactionType = 2 
+	  WHERE H.IsSplitSaleFlg = 0 
+	  AND H.InsertedDateTime between dateadd(day,-90,getdate()) and getdate())
+as UpdateFlag
+
+--2nd statement updates the flag in the header table from the temp table created (joins on transactionid)
+UPDATE DB1
+SET IsSplitSaleFlg = 1 
+from #updateflag U 
+INNER JOIN DB2 H WITH (NOLOCK) ON U.TransactionID = H.TransactionID
+
+--drop temp table with flag info once updated
+drop table #updateflag	 
+
+--1st statement selects the fields which are usually populated by this procedure but in this case, haven't been populated in the last 90 days (uses existing logic)
+select *
+into #updateOrigTran
+from (
+select "OrigCashierNo" = CASE WHEN RT.OrigCashierNo IS NULL THEN H.CashierNo ELSE RT.OrigCashierNo END, 
+		"OrigTicketAmount" = CASE WHEN RT.OrigTicketAmount IS NULL THEN H.TicketAmount ELSE RT.OrigTicketAmount END,
+		"DaysElapsed" = CASE WHEN RT.DaysElapsed IS NULL THEN DATEDIFF(DAY, H.EndTransDateTime, RT.OrigTransDate) ELSE RT.DaysElapsed END,
+		"OrigTransactionID" = CASE WHEN RT.OrigTransactionID IS NULL THEN H.TransactionID ELSE RT.OrigTransactionID END, 
+		"OrigTransactionType" = CASE WHEN C.TransactionID IS NOT NULL AND I.TransactionID IS NULL THEN 90 WHEN C.TransactionID IS NOT NULL AND (I.TransactionID IS NOT NULL OR H.IsSplitSaleFlg = 1) THEN 91 WHEN C.TransactionID IS NULL AND (I.TransactionID IS NOT NULL OR H.IsSplitSaleFlg = 1) THEN 92 ELSE RT.OrigTransactionType END,
+		"Description" = CASE WHEN C.TransactionID IS NOT NULL THEN C.CustomerPersonalID ELSE RT.Description END, 
+		 RT.TransactionID 
+from DB1 RT WITH (NOLOCK) 
+INNER JOIN DB2 H WITH (NOLOCK) on RT.OrigStoreNo = H.StoreNo AND RT.OrigPOSNo = H.POSNo AND RT.OrigTicketNo = H.TicketNo and CAST(RT.OrigTransDate as DATE) = CAST(H.EndTransDateTime as DATE)
+LEFT JOIN DB3 C WITH (NOLOCK) on H.TransactionID = C.TransactionID AND C.CustomerRecordID = '19'
+LEFT JOIN DB4 I WITH (NOLOCK) on H.TransactionType = 57 AND H.TransactionID = I.TransactionID AND I.ReturnType > 0
+WHERE RT.OrigTransactionID IS NULL AND H.InsertedDateTime between dateadd(day,-90,getdate()) and getdate())
+as UpdateOrigTran
+	 
+--Updates all 5 fields required - once these have been input, the XMLbyID will pick up the OrgTranID and generate the audit receipt
+UPDATE DB1
+SET OrigCashierNo = U.OrigCashierNo,
+	OrigTicketAmount = U.OrigTicketAmount,
+	DaysElapsed = U.DaysElapsed,
+	OrigTransactionID = U.OrigTransactionID,
+	OrigTransactionType = U.OrigTransactionType,
+	Description = U.Description
+from #updateOrigTran U 
+INNER JOIN DB2 RT WITH (NOLOCK) ON U.TransactionID = RT.TransactionID	 
+
+--drop temp table with flag info once updated
+drop table #updateOrigTran 
+
